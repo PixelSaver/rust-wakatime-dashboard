@@ -1,87 +1,68 @@
 use eframe::egui;
+use serde::Deserialize;
 
-struct Todo {
-    text: String,
-    done: bool,
+#[derive(Deserialize, Debug, Clone)]
+struct Project {
+    name: String,
+    repo: Option<String>,
+
+    #[serde(rename = "total_seconds")]
+    time: i64,
+}
+#[derive(Deserialize, Debug)]
+struct ProjectsResponse {
+    projects: Vec<String>,
 }
 
-struct TodoApp {
-    todos: Vec<Todo>,
-    new_todo_text: String,
+enum AppState {
+    Projects { projects: Option<Vec<Project>> },
+    User,
+    Leaderboard,
+    YSWS,
+}
+struct WakatimeDash {
+    username: String,
+    state: AppState,
 }
 
-impl TodoApp {
+impl WakatimeDash {
     fn new(_cc: &eframe::CreationContext<'_>) -> Self {
         Self {
-            todos: Vec::new(),
-            new_todo_text: String::new(),
+            username: "PixelSaver".into(),
+            state: AppState::Leaderboard,
         }
     }
 }
 
-impl eframe::App for TodoApp {
+impl eframe::App for WakatimeDash {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         egui::CentralPanel::default().show(ctx, |ui| {
-            ui.heading("My To-Do List");
-
-            ui.add_space(10.0);
-
-            ui.horizontal(|ui| {
-                let text_input = ui.text_edit_singleline(&mut self.new_todo_text);
-
-                if (ui.button("Add").clicked()
-                    || (text_input.lost_focus()
-                        && ui.input(|i| i.key_pressed(egui::Key::Enter))))
-                    && !self.new_todo_text.is_empty()
-                {
-                    self.todos.push(Todo {
-                        text: self.new_todo_text.clone(),
-                        done: false,
-                    });
-                    self.new_todo_text.clear();
-                    text_input.request_focus();
-                }
-            });
-
-            ui.add_space(10.0);
-            ui.separator();
-            ui.add_space(5.0);
-
-            let total = self.todos.len();
-            let done_count = self.todos.iter().filter(|t| t.done).count();
-            ui.label(format!("{done_count} of {total} tasks completed"));
-
-            ui.add_space(5.0);
-
-            let mut to_remove: Option<usize> = None;
-
-            for (i, todo) in self.todos.iter_mut().enumerate() {
-                ui.horizontal(|ui| {
-                    ui.checkbox(&mut todo.done, "");
-
-                    if todo.done {
-                        ui.label(
-                            egui::RichText::new(&todo.text).strikethrough(),
-                        );
-                    } else {
-                        ui.label(&todo.text);
-                    }
-
-                    if ui.button("X").clicked() {
-                        to_remove = Some(i);
-                    }
-                });
-            }
-
-            if let Some(index) = to_remove {
-                self.todos.remove(index);
-            }
-
-            if self.todos.iter().any(|t| t.done) {
-                ui.add_space(10.0);
-                if ui.button("Clear completed").clicked() {
-                    self.todos.retain(|t| !t.done);
-                }
+            if ui.button("Get projects").clicked() {
+                let url =
+                    format!("https://hackatime.hackclub.com/api/v1/users/pixelsaver/projects");
+                let client = reqwest::blocking::Client::new();
+                let project_names = client
+                    .get(&url)
+                    .send()
+                    .unwrap()
+                    .json::<ProjectsResponse>()
+                    .unwrap()
+                    .projects;
+                let details_url = format!(
+                    "https://hackatime.hackclub.com/api/v1/users/pixelsaver/projects/details"
+                );
+                let project_details = client
+                    .get(&details_url)
+                    .query(&[(
+                        "projects",
+                        project_names.join(","),
+                    )])
+                    .send()
+                    .unwrap()
+                    .text()
+                    .unwrap();
+                ui.label(&project_details);
+                println!("Project details: {:?}", project_details);
             }
         });
     }
@@ -90,8 +71,9 @@ impl eframe::App for TodoApp {
 fn main() -> eframe::Result {
     let native_options = eframe::NativeOptions::default();
     eframe::run_native(
-        "To-Do List",
+        "Rust Wackatime Dash",
         native_options,
-        Box::new(|cc| Ok(Box::new(TodoApp::new(cc)))),
-    )
+        Box::new(|cc| Ok(Box::new(WakatimeDash::new(cc)))),
+    )?;
+    Ok(())
 }
