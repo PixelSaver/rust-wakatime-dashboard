@@ -1,17 +1,21 @@
 use eframe::egui;
 use serde::Deserialize;
+mod auth;
 
 #[derive(Deserialize, Debug, Clone)]
 struct Project {
     name: String,
-    repo: Option<String>,
-
-    #[serde(rename = "total_seconds")]
-    time: i64,
+    repo_url: Option<String>,
+    total_seconds: i64,
+    languages: Vec<String>,
 }
 #[derive(Deserialize, Debug)]
 struct ProjectsResponse {
     projects: Vec<String>,
+}
+#[derive(Deserialize, Debug)]
+struct ProjectDetailsResponse {
+    projects: Vec<Project>,
 }
 
 enum AppState {
@@ -28,7 +32,7 @@ struct WakatimeDash {
 impl WakatimeDash {
     fn new(_cc: &eframe::CreationContext<'_>) -> Self {
         Self {
-            username: "PixelSaver".into(),
+            username: "pixelsaver".into(),
             state: AppState::Leaderboard,
         }
     }
@@ -37,6 +41,18 @@ impl WakatimeDash {
 impl eframe::App for WakatimeDash {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         egui::CentralPanel::default().show(ctx, |ui| {
+            match &self.state {
+                AppState::Projects { projects } => {
+                    if let Some(p) = projects {
+                        for project in p {
+                            ui.label(&project.name);
+                        }
+                    } else {
+                        ui.label("No projects loaded");
+                    }
+                }
+                _ => {}
+            }
             if ui.button("Get projects").clicked() {
                 let url =
                     format!("https://hackatime.hackclub.com/api/v1/users/pixelsaver/projects");
@@ -59,21 +75,29 @@ impl eframe::App for WakatimeDash {
                     )])
                     .send()
                     .unwrap()
-                    .text()
+                    .json::<ProjectDetailsResponse>()
                     .unwrap();
-                ui.label(&project_details);
-                println!("Project details: {:?}", project_details);
+                for project in &project_details.projects {
+                    ui.label(&project.name);
+                }
+                self.state = AppState::Projects {
+                    projects: Some(project_details.projects),
+                };
             }
         });
     }
 }
 
 fn main() -> eframe::Result {
-    let native_options = eframe::NativeOptions::default();
-    eframe::run_native(
-        "Rust Wackatime Dash",
-        native_options,
-        Box::new(|cc| Ok(Box::new(WakatimeDash::new(cc)))),
-    )?;
+    // let native_options = eframe::NativeOptions::default();
+    // eframe::run_native(
+    //     "Rust Wackatime Dash",
+    //     native_options,
+    //     Box::new(|cc| Ok(Box::new(WakatimeDash::new(cc)))),
+    // )?;
+    let client = reqwest::blocking::Client::new();
+    let url = format!("https://hackatime.hackclub.com/api/summary");
+    let content = client.get(&url).send().unwrap().text().unwrap();
+    println!("{:?}", content);
     Ok(())
 }
