@@ -7,13 +7,13 @@ use tiny_http::{Response, Server};
 const CLIENT_ID: &str = "56Q7QczaBEH6o8J9YTtMReNIsHOwOrZPB59RAZj64nI";
 const REDIRECT_URI: &str = "http://127.0.0.1:8080/callback";
 
-#[derive(serde::Deserialize)]
-struct TokenResponse {
-    access_token: String,
-    token_type: String,
-    expires_in: u64,
-    scope: String,
-    created_at: u64,
+#[derive(serde::Deserialize, Clone)]
+pub struct TokenResponse {
+    pub access_token: String,
+    pub token_type: String,
+    pub expires_in: u64,
+    pub scope: String,
+    pub created_at: u64,
 }
 
 fn gen_pkce() -> (Vec<u8>, String) {
@@ -92,7 +92,7 @@ fn open_browser(auth_url: &str) {
     }
 }
 
-pub fn auth_user() -> Result<()> {
+pub fn auth_user() -> Result<TokenResponse> {
     let (verifier, challenge) = gen_pkce();
     let state: String = rand::rng()
         .sample_iter(rand::distr::Alphanumeric)
@@ -105,7 +105,7 @@ pub fn auth_user() -> Result<()> {
     open_browser(&auth_url);
     let code = wait_for_code()?;
 
-    println!("Got code: {}", code);
+    // println!("Got code: {}", code);
     
     let token_url = get_token_url(&String::from_utf8(verifier)?, &code)?;
     
@@ -115,7 +115,7 @@ pub fn auth_user() -> Result<()> {
         .send()?
         .json::<TokenResponse>()?;
     
-    println!("Auth code: {}", response.access_token);
+    // println!("Auth code: {}", response.access_token);
 
-    Ok(())
+    Ok(response)
 }
