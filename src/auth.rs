@@ -39,20 +39,10 @@ fn get_auth_code_url(challenge: &str, state: &str) -> Result<String> {
     Ok(request.url().to_string())
 }
 
-fn get_token_url(verify: &str, auth_code: &str) -> Result<String> {
-    let client = reqwest::blocking::Client::new();
-    let request = client
-        .get("https://hackatime.hackclub.com/oauth/token")
-        .query(&[
-            ("client_id", CLIENT_ID),
-            ("code", &auth_code),
-            ("redirect_uri", REDIRECT_URI),
-            ("grant_type", "authorization_code"),
-            ("code_verifier", &verify),
-        ])
-        .build()?;
-    Ok(request.url().to_string())
-}
+// fn get_token_url(verify: &str, auth_code: &str) -> Result<String> {
+//     let client = reqwest::blocking::Client::new();
+//     Ok(request.url().to_string())
+// }
 
 fn wait_for_code() -> anyhow::Result<String> {
     let server = Server::http("127.0.0.1:8080").unwrap();
@@ -106,16 +96,34 @@ pub fn auth_user() -> Result<TokenResponse> {
     let code = wait_for_code()?;
 
     // println!("Got code: {}", code);
-    
-    let token_url = get_token_url(&String::from_utf8(verifier)?, &code)?;
-    
+
+    // let token_url = get_token_url(&String::from_utf8(verifier)?, &code)?;
+
     let client = reqwest::blocking::Client::new();
-    let response = client
-        .post(&token_url)
-        .send()?
-        .json::<TokenResponse>()?;
+    let request = client
+        .post("https://hackatime.hackclub.com/oauth/token")
+        .query(&[
+            ("client_id", CLIENT_ID),
+            ("code", &code),
+            ("redirect_uri", REDIRECT_URI),
+            ("grant_type", "authorization_code"),
+            ("code_verifier", &String::from_utf8(verifier)?),
+        ])
+        .build()?;
+    println!("Request: {:?}", request.url());
+    let request = client.post(&request.url().to_string()).send()?;
+    let status = request.status();
+    let text = request.text()?;
+
+    // println!("Status: {}", status);
+    // println!("Raw body: {}", text);
     
+    // let response = client
+    //     .post(&token_url)
+    //     .send()?
+    //     .json::<TokenResponse>()?;
+
     // println!("Auth code: {}", response.access_token);
 
-    Ok(response)
+    Ok(serde_json::from_str::<TokenResponse>(&text)?)
 }
