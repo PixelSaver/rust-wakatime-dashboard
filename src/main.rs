@@ -1,4 +1,5 @@
 use eframe::egui;
+use anyhow;
 use serde::Deserialize;
 mod auth;
 
@@ -88,16 +89,17 @@ impl eframe::App for WakatimeDash {
     }
 }
 
-fn main() -> eframe::Result {
+fn main() -> anyhow::Result<()> {
     // let native_options = eframe::NativeOptions::default();
     // eframe::run_native(
     //     "Rust Wackatime Dash",
     //     native_options,
     //     Box::new(|cc| Ok(Box::new(WakatimeDash::new(cc)))),
     // )?;
-    let client = reqwest::blocking::Client::new();
-    let url = format!("https://hackatime.hackclub.com/api/summary");
-    let content = client.get(&url).send().unwrap().text().unwrap();
-    println!("{:?}", content);
+    // let client = reqwest::blocking::Client::new();
+    // let url = format!("https://hackatime.hackclub.com/api/summary");
+    // let content = client.get(&url).send().unwrap().text().unwrap();
+    // println!("{:?}", content);
+    auth::auth_user()?;
     Ok(())
 }
