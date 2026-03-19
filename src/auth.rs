@@ -6,7 +6,7 @@ use open;
 use tiny_http::{Response, Server};
 
 const CLIENT_ID: &str = "56Q7QczaBEH6o8J9YTtMReNIsHOwOrZPB59RAZj64nI";
-const REDIRECT_URI: &str = "http://127.0.0.1:8080/callback";
+const REDIRECT_URI: &str = "http://127.0.0.1:49153/callback";
 
 #[derive(serde::Deserialize, Clone)]
 pub struct TokenResponse {
@@ -46,7 +46,7 @@ fn get_auth_code_url(challenge: &str, state: &str) -> Result<String> {
 // }
 
 fn wait_for_code() -> anyhow::Result<String> {
-    let server = Server::http("127.0.0.1:8080").unwrap();
+    let server = Server::http("127.0.0.1:49153").unwrap();
 
     for request in server.incoming_requests() {
         let url = request.url().to_string();
