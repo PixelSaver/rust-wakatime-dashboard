@@ -30,7 +30,7 @@ impl WakatimeDash {
             .access_token;
         // println!("{}", token);
 
-        let url = format!("http://hackatime.hackclub.com/api/v1/authenticated/me");
+        let url = format!("https://hackatime.hackclub.com/api/v1/authenticated/me");
 
         let response = client.get(&url).header("Authorization", format!("Bearer {}", token)).send()?;
         
