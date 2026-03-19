@@ -3,23 +3,9 @@ use anyhow::anyhow;
 use eframe::egui;
 use serde::Deserialize;
 mod api;
+use api::Project;
 mod auth;
 
-#[derive(Deserialize, Debug, Clone)]
-struct Project {
-    name: String,
-    repo_url: Option<String>,
-    total_seconds: i64,
-    languages: Vec<String>,
-}
-#[derive(Deserialize, Debug)]
-struct ProjectsResponse {
-    projects: Vec<String>,
-}
-#[derive(Deserialize, Debug)]
-struct ProjectDetailsResponse {
-    projects: Vec<Project>,
-}
 
 #[derive(Debug)]
 enum Screen {
@@ -126,6 +112,38 @@ impl WakatimeDash {
             self.screen = Screen::Login;
         }
     }
+    fn show_projects(&mut self, ui: &mut egui::Ui) {
+        ui.heading("Projects");
+        
+        if self.data.is_loading {
+            ui.heading("Loading...");
+            return;
+        }
+        
+        if let Some(p) = &self.data.projects {
+            for project in p {
+                ui.label(&project.name);
+            }
+        } else {
+            if ui.button("Load projects").clicked() {
+                let projects = match self.fetch_projects() {
+                    Ok(projects) => { 
+                        self.data.is_loading = false;
+                        projects 
+                    },
+                    Err(e) => {
+                        self.error = Some(e.to_string());
+                        eprintln!("Failed to fetch projects, {}", e);
+                        return;
+                    }
+                };
+                self.data.projects = Some(projects);
+                self.data.is_loading = false;
+            }
+            ui.label("No projects loaded");
+        }
+        
+    }
 
     fn new(_cc: &eframe::CreationContext<'_>) -> Self {
         Self {
@@ -149,16 +167,7 @@ impl eframe::App for WakatimeDash {
                 Screen::User => self.show_user(ui),
                 // Screen::Leaderboard => self.show_leaderboard(ui),
                 // Screen::YSWS => self.show_ysws(ui),
-                Screen::Projects => {
-                    ui.heading("Projects");
-                    if let Some(p) = &self.data.projects {
-                        for project in p {
-                            ui.label(&project.name);
-                        }
-                    } else {
-                        ui.label("No projects loaded");
-                    }
-                }
+                Screen::Projects => self.show_projects(ui),
                 _ => {}
             }
             // if ui.button("Get projects").clicked() {
