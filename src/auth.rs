@@ -1,14 +1,14 @@
 use anyhow::Result;
 use pkce;
-use rand::{self, RngExt, distr::Distribution};
-// use std::process::Command;
+use rand::{self, RngExt};
+use serde::{Deserialize, Serialize};
 use open;
 use tiny_http::{Response, Server};
 
 const CLIENT_ID: &str = "56Q7QczaBEH6o8J9YTtMReNIsHOwOrZPB59RAZj64nI";
 const REDIRECT_URI: &str = "http://127.0.0.1:49153/callback";
 
-#[derive(serde::Deserialize, Clone)]
+#[derive(Deserialize, Serialize, Clone)]
 pub struct TokenResponse {
     pub access_token: String,
     pub token_type: String,
@@ -105,7 +105,7 @@ pub fn auth_user() -> Result<TokenResponse> {
         .build()?;
     println!("Request: {:?}", request.url());
     let request = client.post(&request.url().to_string()).send()?;
-    let status = request.status();
+    let _status = request.status();
     let text = request.text()?;
 
     // println!("Status: {}", status);
