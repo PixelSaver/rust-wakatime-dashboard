@@ -3,7 +3,10 @@ use pkce;
 use rand::{self, RngExt};
 use serde::{Deserialize, Serialize};
 use open;
+use chrono::{DateTime, Utc};
 use tiny_http::{Response, Server};
+
+use crate::cache_token;
 
 const CLIENT_ID: &str = "56Q7QczaBEH6o8J9YTtMReNIsHOwOrZPB59RAZj64nI";
 const REDIRECT_URI: &str = "http://127.0.0.1:49153/callback";
@@ -12,9 +15,20 @@ const REDIRECT_URI: &str = "http://127.0.0.1:49153/callback";
 pub struct TokenResponse {
     pub access_token: String,
     pub token_type: String,
-    pub expires_in: u64,
+    pub expires_in: i64,
     pub scope: String,
-    pub created_at: u64,
+    pub created_at: i64,
+}
+
+impl TokenResponse {
+    pub fn is_valid(&self) -> bool {
+        let expires = match DateTime::from_timestamp(self.expires_in + self.created_at, 0) {
+            Some(e) => e,
+            None => return false,
+        };
+        let now: DateTime<Utc> = DateTime::from(Utc::now());
+        return now < expires;
+    }
 }
 
 fn gen_pkce() -> (Vec<u8>, String) {
@@ -75,6 +89,13 @@ fn open_browser(auth_url: &str) {
 }
 
 pub fn auth_user() -> Result<TokenResponse> {
+    if let Some(token) = cache_token::load_token() {
+        if token.is_valid() {
+            return Ok(token);
+        }
+    };
+    
+    
     let (verifier, challenge) = gen_pkce();
     let state: String = rand::rng()
         .sample_iter(rand::distr::Alphanumeric)
@@ -117,6 +138,8 @@ pub fn auth_user() -> Result<TokenResponse> {
     //     .json::<TokenResponse>()?;
 
     // println!("Auth code: {}", response.access_token);
-
-    Ok(serde_json::from_str::<TokenResponse>(&text)?)
+    // 
+    let token = serde_json::from_str::<TokenResponse>(&text)?;
+    cache_token::save_token(&token)?;
+    Ok(token)
 }
