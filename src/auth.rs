@@ -1,7 +1,8 @@
 use anyhow::Result;
 use pkce;
 use rand::{self, RngExt, distr::Distribution};
-use std::process::Command;
+// use std::process::Command;
+use open;
 use tiny_http::{Response, Server};
 
 const CLIENT_ID: &str = "56Q7QczaBEH6o8J9YTtMReNIsHOwOrZPB59RAZj64nI";
@@ -70,16 +71,7 @@ fn wait_for_code() -> anyhow::Result<String> {
 }
 
 fn open_browser(auth_url: &str) {
-    if cfg!(target_os = "windows") {
-        Command::new("cmd")
-            .args(["/C", "start", auth_url])
-            .spawn()
-            .unwrap();
-    } else if cfg!(target_os = "macos") {
-        Command::new("open").arg(auth_url).spawn().unwrap();
-    } else {
-        Command::new("xdg-open").arg(auth_url).spawn().unwrap();
-    }
+    open::that(auth_url).unwrap();
 }
 
 pub fn auth_user() -> Result<TokenResponse> {
