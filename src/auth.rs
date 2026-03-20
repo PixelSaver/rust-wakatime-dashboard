@@ -88,7 +88,7 @@ fn open_browser(auth_url: &str) {
     open::that(auth_url).unwrap();
 }
 
-pub fn auth_user() -> Result<TokenResponse> {
+pub async fn auth_user() -> Result<TokenResponse> {
     if let Some(token) = cache_token::load_token() {
         if token.is_valid() {
             return Ok(token);
@@ -113,7 +113,7 @@ pub fn auth_user() -> Result<TokenResponse> {
 
     // let token_url = get_token_url(&String::from_utf8(verifier)?, &code)?;
 
-    let client = reqwest::blocking::Client::new();
+    let client = reqwest::Client::new();
     let request = client
         .post("https://hackatime.hackclub.com/oauth/token")
         .query(&[
@@ -125,9 +125,9 @@ pub fn auth_user() -> Result<TokenResponse> {
         ])
         .build()?;
     println!("Request: {:?}", request.url());
-    let request = client.post(&request.url().to_string()).send()?;
+    let request = client.post(&request.url().to_string()).send().await?;
     let _status = request.status();
-    let text = request.text()?;
+    let text = request.text().await?;
 
     // println!("Status: {}", status);
     // println!("Raw body: {}", text);

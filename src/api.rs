@@ -46,107 +46,92 @@ pub struct ProjectDetails {
 struct ProjectDetailsResponse {
     projects: Vec<ProjectDetails>,
 }
-impl WakatimeDash {
-    pub fn fetch_me(&mut self) -> anyhow::Result<Me> {
-        self.data.is_loading = true;
-        let client = reqwest::blocking::Client::new();
-        let token = &self
-            .data
-            .token
-            .as_ref()
-            .ok_or(anyhow::anyhow!("Token not found"))?
-            .access_token;
-        // println!("{}", token);
 
-        let url = format!("https://hackatime.hackclub.com/api/v1/authenticated/me");
+pub async fn fetch_me(token: &str) -> anyhow::Result<Me> {
+    let client = reqwest::Client::new();
+    // println!("{}", token);
 
-        let response = client.get(&url).header("Authorization", format!("Bearer {}", token)).send()?;
-        
-        let status = response.status();
-        
-        if !status.is_success() {
-            let text = response.text()?;
-            return Err(anyhow!(
-                "Request failed: {} - {}",
-                status,
-                text,
-            ));
-        }
-        let body = response.json::<Me>()?;
-        println!("Me: {:?}", body);
-        Ok(body)
+    let url = format!("https://hackatime.hackclub.com/api/v1/authenticated/me");
+
+    let response = client
+        .get(&url)
+        .header("Authorization", format!("Bearer {}", token))
+        .send()
+        .await?;
+
+    let status = response.status();
+
+    if !status.is_success() {
+        let text = response.text().await?;
+        return Err(anyhow!("Request failed: {} - {}", status, text,));
     }
-    fn fetch_project_list(&mut self) -> anyhow::Result<Vec<ProjectListItem>> {
-        let client = reqwest::blocking::Client::new();
-        let token = &self
-            .data
-            .token
-            .as_ref()
-            .ok_or(anyhow::anyhow!("Token not found"))?
-            .access_token;
+    let body = response.json::<Me>().await?;
+    println!("Me: {:?}", body);
+    Ok(body)
+}
+async fn fetch_project_list(token: &str) -> anyhow::Result<Vec<ProjectListItem>> {
+    let client = reqwest::Client::new();
 
-        let url = format!("https://hackatime.hackclub.com/api/v1/authenticated/projects");
+    let url = format!("https://hackatime.hackclub.com/api/v1/authenticated/projects");
 
-        let response = client.get(&url).header("Authorization", format!("Bearer {}", token)).send()?;
-        
-        let status = response.status();
-        
-        if !status.is_success() {
-            let text = response.text()?;
-            return Err(anyhow!(
-                "Request failed: {} - {}",
-                status,
-                text,
-            ));
-        }
-        let body = response.json::<ProjectListResponse>()?;
-        Ok(body.projects)
+    let response = client
+        .get(&url)
+        .header("Authorization", format!("Bearer {}", token))
+        .send()
+        .await?;
+
+    let status = response.status();
+
+    if !status.is_success() {
+        let text = response.text().await?;
+        return Err(anyhow!("Request failed: {} - {}", status, text,));
     }
-    fn fetch_project_details(&mut self, username: String) -> anyhow::Result<Vec<ProjectDetails>> {
-        let client = reqwest::blocking::Client::new();
-        let token = &self
-            .data
-            .token
-            .as_ref()
-            .ok_or(anyhow::anyhow!("Token not found"))?
-            .access_token;
+    let body = response.json::<ProjectListResponse>().await?;
+    Ok(body.projects)
+}
+async fn fetch_project_details(
+    token: &str,
+    username: String,
+) -> anyhow::Result<Vec<ProjectDetails>> {
+    let client = reqwest::Client::new();
 
-        let url = format!("https://hackatime.hackclub.com/api/v1/users/{}/projects/details", username);
+    let url = format!(
+        "https://hackatime.hackclub.com/api/v1/users/{}/projects/details",
+        username
+    );
 
-        let response = client.get(&url).header("Authorization", format!("Bearer {}", token)).send()?;
-        
-        let status = response.status();
-        
-        if !status.is_success() {
-            let text = response.text()?;
-            return Err(anyhow!(
-                "Request failed: {} - {}",
-                status,
-                text,
-            ));
-        }
-        let body = response.json::<ProjectDetailsResponse>()?;
-        Ok(body.projects)
+    let response = client
+        .get(&url)
+        .header("Authorization", format!("Bearer {}", token))
+        .send()
+        .await?;
+
+    let status = response.status();
+
+    if !status.is_success() {
+        let text = response.text().await?;
+        return Err(anyhow!("Request failed: {} - {}", status, text,));
     }
-    pub fn fetch_projects(&mut self) -> anyhow::Result<Vec<Project>> {
-        let mut projects: Vec<Project> = self.fetch_project_list()?.into_iter().map(|p| {
-            Project {
-                name: p.name,
-                total_seconds: p.total_seconds,
-                languages: p.languages,
-                archived: p.archived,
-                repo_url: None,
-            }
-        }).collect();
-        
-        if let Some(user) = &self.data.user {
-            let project_details = self.fetch_project_details(user.id.to_string())?;
-            for (project, detail) in projects.iter_mut().zip(project_details.iter()) {
-                project.repo_url = detail.repo_url.clone();
-            }
-        }
-        println!("{:?}", projects);
-        Ok(projects)
+    let body = response.json::<ProjectDetailsResponse>().await?;
+    Ok(body.projects)
+}
+pub async fn fetch_projects(token: &str, user_id: u64) -> anyhow::Result<Vec<Project>> {
+    let mut projects: Vec<Project> = fetch_project_list(&token)
+        .await?
+        .into_iter()
+        .map(|p| Project {
+            name: p.name,
+            total_seconds: p.total_seconds,
+            languages: p.languages,
+            archived: p.archived,
+            repo_url: None,
+        })
+        .collect();
+
+    let project_details = fetch_project_details(&token, user_id.to_string()).await?;
+    for (project, detail) in projects.iter_mut().zip(project_details.iter()) {
+        project.repo_url = detail.repo_url.clone();
     }
     
+    Ok(projects)
 }

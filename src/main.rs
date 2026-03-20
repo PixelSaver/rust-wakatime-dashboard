@@ -1,9 +1,9 @@
 use crate::auth::TokenResponse;
 use anyhow::anyhow;
 use eframe::egui;
-use serde::Deserialize;
+use tokio::{runtime::Runtime, sync::mpsc};
 mod api;
-use api::Project;
+use api::*;
 mod auth;
 mod cache_token;
 
@@ -22,10 +22,20 @@ struct AppData {
     is_loading: bool,
 }
 
+pub enum AsyncMessage {
+    LoginSuccess(TokenResponse, api::Me),
+    UserLoaded(api::Me),
+    ProjectsLoaded(Vec<Project>),
+    Error(String)
+}
+
 struct WakatimeDash {
     data: AppData,
     screen: Screen,
     error: Option<String>,
+    rt: Runtime,
+    tx: mpsc::UnboundedSender<AsyncMessage>,
+    rx: mpsc::UnboundedReceiver<AsyncMessage>,
 }
 
 impl WakatimeDash {
@@ -43,27 +53,25 @@ impl WakatimeDash {
         if ui.button("Login with Wakatime").clicked() {
             self.data.is_loading = true;
             self.error = None;
-            match auth::auth_user() {
-                Ok(token_response) => {
-                    self.data.token = Some(token_response);
-
-                    match self.fetch_me() {
-                        Ok(user) => {
-                            self.data.user = Some(user);
-                            self.screen = Screen::User;
-                        }
-                        Err(e) => {
-                            self.error =
-                                Some(anyhow!("Fetching User Data failed: {}", e).to_string());
-                        }
+            
+            let tx = self.tx.clone();
+            
+            self.rt.spawn(async move {
+                let result: anyhow::Result<(TokenResponse, api::Me)> = async {
+                    let token = auth::auth_user().await?;
+                    let user = api::fetch_me(&token.access_token).await?;
+                    
+                    Ok((token, user))
+                }.await;
+                match result {
+                    Ok((token, user)) => {
+                        let _ = tx.send(AsyncMessage::LoginSuccess( token, user ));
+                    },
+                    Err(e) => {
+                        let _ = tx.send(AsyncMessage::Error(e.to_string()));
                     }
                 }
-                Err(e) => {
-                    self.error = Some(anyhow!("Authenticate failed: {}", e).to_string());
-                }
-            }
-
-            self.data.is_loading = false;
+            });
         }
     }
     fn show_user(&mut self, ui: &mut egui::Ui) {
@@ -126,19 +134,34 @@ impl WakatimeDash {
             }
         } else {
             if ui.button("Load projects").clicked() {
-                let projects = match self.fetch_projects() {
-                    Ok(projects) => { 
-                        self.data.is_loading = false;
-                        projects 
-                    },
-                    Err(e) => {
-                        self.error = Some(e.to_string());
-                        eprintln!("Failed to fetch projects, {}", e);
-                        return;
-                    }
-                };
-                self.data.projects = Some(projects);
-                self.data.is_loading = false;
+                self.data.is_loading = true;
+                let tx = self.tx.clone();
+                let token = self.data.token.as_ref().unwrap().access_token.clone();
+                let user_id = self.data.user.as_ref().unwrap().id;
+                
+                self.rt.spawn(async move {
+                    let projects = match api::fetch_projects(&token, user_id).await {
+                        Ok(projects) => projects,
+                        Err(e) => {
+                            tx.send(AsyncMessage::Error(e.to_string())).ok();
+                            return;
+                        }
+                    };
+                    tx.send(AsyncMessage::ProjectsLoaded(projects)).ok();
+                });
+                // let projects = match self.fetch_projects() {
+                //     Ok(projects) => { 
+                //         self.data.is_loading = false;
+                //         projects 
+                //     },
+                //     Err(e) => {
+                //         self.error = Some(e.to_string());
+                //         eprintln!("Failed to fetch projects, {}", e);
+                //         return;
+                //     }
+                // };
+                // self.data.projects = Some(projects);
+                // self.data.is_loading = false;
             }
             ui.label("No projects loaded");
         }
@@ -146,6 +169,7 @@ impl WakatimeDash {
     }
 
     fn new(_cc: &eframe::CreationContext<'_>) -> Self {
+        let (tx, rx) = mpsc::unbounded_channel();
         Self {
             screen: Screen::Login,
             data: AppData {
@@ -155,49 +179,38 @@ impl WakatimeDash {
                 is_loading: false,
             },
             error: None,
+            rt: Runtime::new().unwrap(),
+            tx,
+            rx,
         }
     }
 }
 
 impl eframe::App for WakatimeDash {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+        if let Ok(msg) = self.rx.try_recv() {
+            match msg {
+                AsyncMessage::LoginSuccess( token, user ) => {
+                    self.data.token = Some(token);
+                    self.data.user = Some(user);
+                    self.screen = Screen::User;
+                    self.data.is_loading = false;
+                },
+                AsyncMessage::ProjectsLoaded( projects ) => {
+                    self.data.projects = Some(projects);
+                    self.screen = Screen::Projects;
+                    self.data.is_loading = false;
+                }
+                _ => {}
+            }
+        }
         egui::CentralPanel::default().show(ctx, |ui| {
             match self.screen {
                 Screen::Login => self.show_login(ui),
                 Screen::User => self.show_user(ui),
-                // Screen::Leaderboard => self.show_leaderboard(ui),
-                // Screen::YSWS => self.show_ysws(ui),
                 Screen::Projects => self.show_projects(ui),
                 _ => {}
             }
-            // if ui.button("Get projects").clicked() {
-            //     let url =
-            //         format!("https://hackatime.hackclub.com/api/v1/users/pixelsaver/projects");
-            //     let client = reqwest::blocking::Client::new();
-            //     let project_names = client
-            //         .get(&url)
-            //         .send()
-            //         .unwrap()
-            //         .json::<ProjectsResponse>()
-            //         .unwrap()
-            //         .projects;
-            //     let details_url = format!(
-            //         "https://hackatime.hackclub.com/api/v1/users/pixelsaver/projects/details"
-            //     );
-            //     let project_details = client
-            //         .get(&details_url)
-            //         .query(&[(
-            //             "projects",
-            //             project_names.join(","),
-            //         )])
-            //         .send()
-            //         .unwrap()
-            //         .json::<ProjectDetailsResponse>()
-            //         .unwrap();
-            //     for project in &project_details.projects {
-            //         ui.label(&project.name);
-            //     }
-            // }
         });
     }
 }
@@ -210,9 +223,5 @@ fn main() -> anyhow::Result<()> {
         Box::new(|cc| Ok(Box::new(WakatimeDash::new(cc)))),
     )
     .map_err(|e| anyhow::anyhow!("Failed to run eframe: {}", e))?;
-    // let client = reqwest::blocking::Client::new();
-    // let url = format!("https://hackatime.hackclub.com/api/summary");
-    // let content = client.get(&url).send().unwrap().text().unwrap();
-    // println!("{:?}", content);
     Ok(())
 }
