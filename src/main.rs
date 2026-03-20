@@ -134,6 +134,10 @@ impl WakatimeDash {
         });
     }
     fn show_projects(&mut self, ui: &mut egui::Ui) {
+        if ui.button("Back").clicked() {
+            self.screen = Screen::User;
+            return;
+        }
         WakatimeDash::fancy_frame(ui).show(ui, |ui| {
             ui.set_width(ui.available_width());
             
@@ -143,9 +147,15 @@ impl WakatimeDash {
             }
 
             if let Some(p) = &self.data.projects {
-                for project in p {
-                    ui.label(&project.name);
-                }
+                egui::ScrollArea::vertical().show(ui, |ui| {
+                    ui.set_width(ui.available_width());
+                    for project in p {
+                        WakatimeDash::fancy_frame(ui).show(ui, |ui| {
+                            ui.set_width(ui.available_width());
+                            project.display(ui);
+                        });
+                    }
+                });
             } else {
                 self.data.is_loading = true;
                 let tx = self.tx.clone();

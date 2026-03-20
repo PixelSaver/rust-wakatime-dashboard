@@ -1,8 +1,7 @@
-use anyhow::anyhow;
-use serde::Deserialize;
+use anyhow::{Context, anyhow};
+use chrono::{Duration, TimeDelta};
 use eframe::egui::{self, Ui};
-use crate::auth::TokenResponse;
-use crate::{AppData, Screen, WakatimeDash};
+use serde::Deserialize;
 
 #[derive(Debug, serde::Deserialize)]
 pub struct TrustFactor {
@@ -28,14 +27,51 @@ pub struct Project {
     pub archived: bool,
 }
 impl Project {
-    fn display(&self, ui: &mut Ui) {
+    pub fn display(&self, ui: &mut Ui) -> anyhow::Result<()> {
+        let mut err: Result<(), anyhow::Error> = Ok(());
         ui.horizontal(|ui| {
-            ui.label(&self.name);
-            
+            let repo_response = ui.selectable_label(false, &self.name);
+            if repo_response.clicked() {
+                if let Some(url) = &self.repo_url {
+                    if let Err(e) =
+                        open::that(url).with_context(|| format!("Failed to open repo url: {}", url))
+                    {
+                        err = Err(e);
+                    };
+                }
+            }
+
+            // ui.set_max_width(ui.available_width() - 20.0);
+
+            let dur = Duration::seconds(self.total_seconds);
+            let hrs = dur.num_hours();
+            let mins = dur.num_minutes() % 60;
+            let secs = dur.num_seconds() % 60;
+
+            let mut parts = vec![];
+            if hrs > 0 {
+                parts.push(format!("{}h", hrs))
+            }
+            if mins > 0 {
+                parts.push(format!("{}m", mins))
+            }
+            if secs > 0 {
+                parts.push(format!("{}s", secs))
+            }
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Min), |ui| {
-                ui.label(format!("{}s", self.total_seconds));
+                ui.label(parts.join(" "));
             });
         });
+
+        if !self.languages.is_empty() {
+            ui.horizontal_wrapped(|ui| {
+                for lang in &self.languages {
+                    ui.label(lang);
+                }
+            });
+        }
+        err?;
+        Ok(())
     }
 }
 
@@ -144,6 +180,6 @@ pub async fn fetch_projects(token: &str, user_id: u64) -> anyhow::Result<Vec<Pro
     for (project, detail) in projects.iter_mut().zip(project_details.iter()) {
         project.repo_url = detail.repo_url.clone();
     }
-    
+
     Ok(projects)
 }
