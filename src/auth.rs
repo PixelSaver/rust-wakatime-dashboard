@@ -104,7 +104,7 @@ pub async fn auth_user() -> Result<TokenResponse> {
         .collect();
 
     let auth_url = get_auth_code_url(&challenge, &state)?;
-    println!("Auth code url: {:?}", auth_url);
+    // println!("Auth code url: {:?}", auth_url);
 
     open_browser(&auth_url);
     let code = wait_for_code()?;

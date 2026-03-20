@@ -24,9 +24,8 @@ struct AppData {
 
 pub enum AsyncMessage {
     LoginSuccess(TokenResponse, api::Me),
-    UserLoaded(api::Me),
     ProjectsLoaded(Vec<Project>),
-    Error(String)
+    Error(String),
 }
 
 struct WakatimeDash {
@@ -39,106 +38,120 @@ struct WakatimeDash {
 }
 
 impl WakatimeDash {
+    fn fancy_frame(ui: &egui::Ui) -> egui::Frame {
+        egui::Frame::new()
+            .inner_margin(12)
+            .outer_margin(6)
+            .corner_radius(14)
+            .stroke(ui.visuals().widgets.noninteractive.bg_stroke)
+            .fill(ui.visuals().panel_fill)
+    }
     fn show_login(&mut self, ui: &mut egui::Ui) {
-        ui.heading("Login");
-
-        if self.data.is_loading {
-            ui.heading("Loading...");
-        }
-
-        if let Some(e) = &self.error {
-            ui.colored_label(egui::Color32::RED, e);
-        }
-
-        if ui.button("Login with Wakatime").clicked() {
-            self.data.is_loading = true;
-            self.error = None;
+        WakatimeDash::fancy_frame(ui).show(ui, |ui| {
+            ui.set_width(ui.available_width());
             
-            let tx = self.tx.clone();
-            
-            self.rt.spawn(async move {
-                let result: anyhow::Result<(TokenResponse, api::Me)> = async {
-                    let token = auth::auth_user().await?;
-                    let user = api::fetch_me(&token.access_token).await?;
-                    
-                    Ok((token, user))
-                }.await;
-                match result {
-                    Ok((token, user)) => {
-                        let _ = tx.send(AsyncMessage::LoginSuccess( token, user ));
-                    },
-                    Err(e) => {
-                        let _ = tx.send(AsyncMessage::Error(e.to_string()));
+            if self.data.is_loading {
+                ui.heading("Loading...");
+                return;
+            }
+
+            if let Some(e) = &self.error {
+                ui.colored_label(egui::Color32::RED, e);
+            }
+
+            if ui.button("Login with Wakatime").clicked() {
+                self.data.is_loading = true;
+                self.error = None;
+
+                let tx = self.tx.clone();
+
+                self.rt.spawn(async move {
+                    let result: anyhow::Result<(TokenResponse, api::Me)> = async {
+                        let token = auth::auth_user().await?;
+                        let user = api::fetch_me(&token.access_token).await?;
+
+                        Ok((token, user))
                     }
-                }
-            });
-        }
+                    .await;
+                    match result {
+                        Ok((token, user)) => {
+                            let _ = tx.send(AsyncMessage::LoginSuccess(token, user));
+                        }
+                        Err(e) => {
+                            let _ = tx.send(AsyncMessage::Error(e.to_string()));
+                        }
+                    }
+                });
+            }
+        });
     }
     fn show_user(&mut self, ui: &mut egui::Ui) {
-        ui.heading("User Profile");
-
-        if self.data.is_loading {
-            ui.heading("Loading...");
-            return;
-        }
-
-        if let Some(e) = &self.error {
-            ui.colored_label(egui::Color32::RED, e);
-        }
-
-        if let Some(user) = &self.data.user {
-            if let Some(gh_username) = &user.github_username {
-                ui.label(format!("GitHub: {}", gh_username));
+        WakatimeDash::fancy_frame(ui).show(ui, |ui| {
+            ui.set_width(ui.available_width());
+            
+            if self.data.is_loading {
+                ui.heading("Loading...");
+                return;
             }
-            if let Some(slack_id) = &user.slack_id {
-                ui.label(format!("Slack ID: {}", slack_id));
+
+            if let Some(e) = &self.error {
+                ui.colored_label(egui::Color32::RED, e);
             }
-            // ui.label(format!(
-            //     "Trust Level: {} ({})",
-            //     user.trust_factor.trust_level,
-            //     user.trust_factor.trust_value
-            // ));
+
+            if let Some(user) = &self.data.user {
+                if let Some(gh_username) = &user.github_username {
+                    ui.label(format!("GitHub: {}", gh_username));
+                }
+                if let Some(slack_id) = &user.slack_id {
+                    ui.label(format!("Slack ID: {}", slack_id));
+                }
+                // ui.label(format!(
+                //     "Trust Level: {} ({})",
+                //     user.trust_factor.trust_level,
+                //     user.trust_factor.trust_value
+                // ));
+
+                ui.separator();
+
+                ui.label("Emails:");
+                for email in &user.emails {
+                    ui.label(format!("- {}", email));
+                }
+            } else {
+                if ui.button("Load projects").clicked() {}
+            }
 
             ui.separator();
 
-            ui.label("Emails:");
-            for email in &user.emails {
-                ui.label(format!("- {}", email));
+            if ui.button("Go to projects").clicked() {
+                self.screen = Screen::Projects;
             }
-        } else {
-            if ui.button("Load projects").clicked() {}
-        }
-
-        ui.separator();
-
-        if ui.button("Go to projects").clicked() {
-            self.screen = Screen::Projects;
-        }
-        if ui.button("Logout").clicked() {
-            self.data.token = None;
-            self.data.user = None;
-            self.screen = Screen::Login;
-        }
+            if ui.button("Logout").clicked() {
+                self.data.token = None;
+                self.data.user = None;
+                self.screen = Screen::Login;
+            }
+        });
     }
     fn show_projects(&mut self, ui: &mut egui::Ui) {
-        ui.heading("Projects");
-        
-        if self.data.is_loading {
-            ui.heading("Loading...");
-            return;
-        }
-        
-        if let Some(p) = &self.data.projects {
-            for project in p {
-                ui.label(&project.name);
+        WakatimeDash::fancy_frame(ui).show(ui, |ui| {
+            ui.set_width(ui.available_width());
+            
+            if self.data.is_loading {
+                ui.heading("Loading...");
+                return;
             }
-        } else {
-            if ui.button("Load projects").clicked() {
+
+            if let Some(p) = &self.data.projects {
+                for project in p {
+                    ui.label(&project.name);
+                }
+            } else {
                 self.data.is_loading = true;
                 let tx = self.tx.clone();
                 let token = self.data.token.as_ref().unwrap().access_token.clone();
                 let user_id = self.data.user.as_ref().unwrap().id;
-                
+
                 self.rt.spawn(async move {
                     let projects = match api::fetch_projects(&token, user_id).await {
                         Ok(projects) => projects,
@@ -149,23 +162,8 @@ impl WakatimeDash {
                     };
                     tx.send(AsyncMessage::ProjectsLoaded(projects)).ok();
                 });
-                // let projects = match self.fetch_projects() {
-                //     Ok(projects) => { 
-                //         self.data.is_loading = false;
-                //         projects 
-                //     },
-                //     Err(e) => {
-                //         self.error = Some(e.to_string());
-                //         eprintln!("Failed to fetch projects, {}", e);
-                //         return;
-                //     }
-                // };
-                // self.data.projects = Some(projects);
-                // self.data.is_loading = false;
             }
-            ui.label("No projects loaded");
-        }
-        
+        });
     }
 
     fn new(_cc: &eframe::CreationContext<'_>) -> Self {
@@ -188,15 +186,27 @@ impl WakatimeDash {
 
 impl eframe::App for WakatimeDash {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+        let header = match &self.screen {
+            Screen::Login => "Login",
+            Screen::Projects => "Projects",
+            Screen::Leaderboard => "Leaderboard",
+            Screen::User => "User",
+            Screen::YSWS => "YSWS",
+        };
+        egui::TopBottomPanel::top("top_bar").show(ctx, |ui| {
+            ui.horizontal_centered(|ui| {
+                ui.heading(header);
+            });
+        });
         if let Ok(msg) = self.rx.try_recv() {
             match msg {
-                AsyncMessage::LoginSuccess( token, user ) => {
+                AsyncMessage::LoginSuccess(token, user) => {
                     self.data.token = Some(token);
                     self.data.user = Some(user);
                     self.screen = Screen::User;
                     self.data.is_loading = false;
-                },
-                AsyncMessage::ProjectsLoaded( projects ) => {
+                }
+                AsyncMessage::ProjectsLoaded(projects) => {
                     self.data.projects = Some(projects);
                     self.screen = Screen::Projects;
                     self.data.is_loading = false;
@@ -204,13 +214,11 @@ impl eframe::App for WakatimeDash {
                 _ => {}
             }
         }
-        egui::CentralPanel::default().show(ctx, |ui| {
-            match self.screen {
-                Screen::Login => self.show_login(ui),
-                Screen::User => self.show_user(ui),
-                Screen::Projects => self.show_projects(ui),
-                _ => {}
-            }
+        egui::CentralPanel::default().show(ctx, |ui| match self.screen {
+            Screen::Login => self.show_login(ui),
+            Screen::User => self.show_user(ui),
+            Screen::Projects => self.show_projects(ui),
+            _ => {}
         });
     }
 }

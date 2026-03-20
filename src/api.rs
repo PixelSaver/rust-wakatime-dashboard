@@ -1,6 +1,6 @@
 use anyhow::anyhow;
 use serde::Deserialize;
-
+use eframe::egui::{self, Ui};
 use crate::auth::TokenResponse;
 use crate::{AppData, Screen, WakatimeDash};
 
@@ -27,6 +27,18 @@ pub struct Project {
     pub languages: Vec<String>,
     pub archived: bool,
 }
+impl Project {
+    fn display(&self, ui: &mut Ui) {
+        ui.horizontal(|ui| {
+            ui.label(&self.name);
+            
+            ui.with_layout(egui::Layout::right_to_left(egui::Align::Min), |ui| {
+                ui.label(format!("{}s", self.total_seconds));
+            });
+        });
+    }
+}
+
 #[derive(Deserialize, Debug)]
 struct ProjectListItem {
     name: String,
@@ -66,7 +78,7 @@ pub async fn fetch_me(token: &str) -> anyhow::Result<Me> {
         return Err(anyhow!("Request failed: {} - {}", status, text,));
     }
     let body = response.json::<Me>().await?;
-    println!("Me: {:?}", body);
+    // println!("Me: {:?}", body);
     Ok(body)
 }
 async fn fetch_project_list(token: &str) -> anyhow::Result<Vec<ProjectListItem>> {
